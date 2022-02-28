@@ -12,7 +12,7 @@ wg-peer [-a|-add|a|add|-r|-revoke|r|revoke] PROFILENAME
 
 ## Installation and configuration of the script
 Create the folder /etc/wireguard/peers: `# mkdir -p /etc/wireguard/peers/`
-Download the script from `https://link` and copy it to `/usr/local/sbin/wp-peer`.
+Download the script from `https://raw.githubusercontent.com/fladna9/wg-peer/main/wg-peer` and copy it to `/usr/local/sbin/wp-peer`.
 Edit `/usr/local/sbin/wp-peer`, and tune the following variables:
 ```
 ## SERVER INFO AND PEER CONFIGURATION ##
