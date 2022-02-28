@@ -135,7 +135,7 @@ function revoke() {
 
 function usage() {
 	echo "Wireguard Simple Peer Manager"
-	echo "wp-peer Copyright (C) 2022 Maxence MOHR"
+	echo "wg-peer Copyright (C) 2022 Maxence MOHR"
 	echo "This is free software, and you are welcome to redistribute it under certain conditions; see the GNU/GPL v3 for more informations."
 	echo "See https://github.com/fladna9/wg-peer/ for info and updates."
 	echo "Usage: "
