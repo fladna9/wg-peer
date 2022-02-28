@@ -1,0 +1,145 @@
+#!/bin/bash
+
+## SERVER INFO AND PEER CONFIGURATION ##
+SERVERPUBKEY=""
+SERVERIP=""
+SERVERPORT=""
+PERSISTENTKEEPALIVE="25"
+PEERALLOWEDIP="0.0.0.0/0"
+DNS="1.1.1.1"
+SERVERIFNAME="wg0"
+## SCRIPT CONFIG ##
+WORKINGDIR="/etc/wireguard/peers/"
+INDEXFILE="index"
+STARTINDEX="20"
+IPNET="192.168.255."
+## Note that this script is written for /24 networks.
+
+
+function main() {
+	case $1 in
+		-a|--add|add|a)
+			# If the profile is not given or a profile with the same name exist, exit.
+			if [[ -n "$2" && ! -f "$WORKINGDIR$2.conf" ]]; then
+				create "$2"
+			else 
+				echo "Error: No profile name provided or profile already exists"
+				usage
+				exit 1
+			fi
+			;;
+
+		-r|--revoke|r|revoke)
+			# If the profile is not given or does not exist, exit.
+			if [[ -n "$2" && -f "$WORKINGDIR$2.conf" ]]; then
+				revoke "$2"
+			else 
+				echo "Error: No profile name provided or profile does not exist"
+				usage
+				exit 1
+			fi
+			;;
+
+		*)
+			usage
+			exit 0
+			;;
+	esac
+}
+
+function create() {
+	echo "Creating profile $1..."
+
+	cd "$WORKINGDIR"
+
+	# Creating or reading index file
+	# Index file point to last attributed IP
+	if [[ ! -f "$INDEXFILE" ]]; then
+		echo "$STARTINDEX" > "$INDEXFILE"
+		typeset -i CURRENTIP=$(cat "$INDEXFILE")
+	else
+		typeset -i CURRENTIP=$(cat "$INDEXFILE")+1
+		echo "$CURRENTIP" > "$INDEXFILE"
+	fi
+	if [[ $CURRENTIP -ge 254 ]]; then
+		echo "IP pool is full"
+		exit 1
+	fi
+	IP="$IPNET$CURRENTIP"
+	echo "Allocated IP address: $IP"
+
+	# Generate keys
+	PRIVKEY=$(wg genkey)
+	PUBKEY=$(echo "$PRIVKEY" | wg pubkey)
+	echo "Private key is <redacted>"
+	echo "Public key is $PUBKEY"
+
+	# Allowing peer keys to connect to this instance
+	wg set "$SERVERIFNAME" peer "$PUBKEY" allowed-ips "$IP"
+	if [[ ! $? -eq 0 ]]; then
+		echo "Could not add profile to wg server. Exiting."
+		exit 1
+	fi
+	echo "Peer keys added to wg server." 
+
+	# Creating configuration file, only root can see them.
+	umask 377
+	cat << EOT >> "$1.conf"
+[Interface]
+PrivateKey = $PRIVKEY
+Address = $IP/24
+DNS = $DNS
+
+[Peer]
+PublicKey = $SERVERPUBKEY
+AllowedIPs = $PEERALLOWEDIP
+Endpoint = $SERVERIP:$SERVERPORT
+PersistentKeepalive = $PERSISTENTKEEPALIVE
+EOT
+
+	echo "Done. Configuration file $1.conf generated."
+	echo " "
+	echo "##### CONFIG FILE #####"
+	cat "$1.conf"
+	echo "#######################"
+	echo " "
+	echo "Put the lines between #s in a conf file, and off you go !"
+	echo "See ya."
+	echo " "
+	cd - > /dev/null
+	exit 0
+}
+
+function revoke() {
+	echo "Revoking profile $1..."
+	cd "$WORKINGDIR"
+
+	# Generating the pubic key from the private key in the peer profile configuration file
+	PRIVKEYTOREVOKE=$(sed -e 's/^PrivateKey = \(.*\)$/\1/g' "$1.conf" | head -n 2 | tail -n 1)
+	PUBKEYTOREVOKE=$(echo "$PRIVKEYTOREVOKE" | wg pubkey)
+
+	# Revoke public key
+	echo "Revoking $PUBKEYTOREVOKE..."
+	wg set "$SERVERIFNAME" peer "$PUBKEYTOREVOKE" remove
+	if [[ ! $? -eq 0 ]]; then
+		echo "Could not revoke profile from wg server. Exiting."
+		exit 1
+	fi
+
+	# Deleting the peer profile, not needed anymore.
+	rm "$1.conf"
+	echo "Done. Configuration file $1.conf deleted." 
+	cd -
+	exit 0
+}
+
+function usage() {
+	echo "Wireguard Simple Peer Manager"
+	echo "wp-peer Copyright (C) 2022 Maxence MOHR"
+	echo "This is free software, and you are welcome to redistribute it under certain conditions; see the GNU/GPL v3 for more informations."
+	echo "See https://github.com/fladna9/wg-peer/ for info and updates."
+	echo "Usage: "
+	echo "$0 [-a|-add|a|add|-r|-revoke|r|revoke] PROFILENAME"
+}
+
+main $@
